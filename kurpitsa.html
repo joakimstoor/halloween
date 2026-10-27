@@ -41,6 +41,11 @@
   #kasvot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; visibility: hidden; }
   #kasvot img.nakyy { visibility: visible; }
   #vara { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; mix-blend-mode: screen; }
+  #noitaKuva { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);
+    opacity: 0; transition: opacity .8s ease; pointer-events: none;
+    -webkit-mask-image: radial-gradient(ellipse 62% 70% at 50% 48%, #000 55%, transparent 100%);
+            mask-image: radial-gradient(ellipse 62% 70% at 50% 48%, #000 55%, transparent 100%); }
+  #savu { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   #kulma { position: absolute; left: 0; top: 0; width: 90px; height: 90px; }
   #piste { position: absolute; right: 10px; bottom: 10px; width: 8px; height: 8px; border-radius: 50%; background: #600; opacity: .5; }
   #piste.odottaa { background: #a60; } #piste.yhdistetty { background: #2a2; }
@@ -85,7 +90,9 @@
 </div>
 
 <div id="lava">
+  <video id="noitaKuva" playsinline muted autoplay></video>
   <div id="kasvot"></div>
+  <canvas id="savu"></canvas>
   <video id="vara" playsinline></video>
   <div id="testiohje">Testitila: puhu tabletille. Takaisin: vasen yläkulma 3 s.</div>
   <div id="kulma"></div>
@@ -231,6 +238,7 @@
   function heraa() {
     if (hereilla) return;
     hereilla = true;
+    moodi = 'kurpitsa';
     if ($('ilmeet').value === 'auto') asetaIlme('virne', 2600);   // herää ilkeästi virnistäen
     kasvot.style.transition = 'opacity 1.6s cubic-bezier(.6,0,.9,.5)';
     kasvot.style.opacity = 1;
@@ -238,6 +246,8 @@
   }
   function nuku() {
     hereilla = false;
+    if (moodi === 'kasvot') piilotaKasvot(false);
+    moodi = 'musta';
     kasvot.style.transition = 'opacity 1.2s ease';
     kasvot.style.opacity = 0;
     lahetaTila();
@@ -253,6 +263,99 @@
     return true;
   }
 
+  // ---------- noidan kasvot ja savumuutos ----------
+  // moodi: 'musta' (pimeä), 'kasvot' (puhelimen etukamera näkyy), 'kurpitsa'
+  const noitaKuva = $('noitaKuva');
+  let moodi = 'musta', kurpitsaTehoste = null;
+  function naytaKasvot() {
+    if (moodi === 'kasvot') return;
+    if (hereilla) { hereilla = false; kasvot.style.transition = 'opacity .5s ease'; kasvot.style.opacity = 0; }
+    moodi = 'kasvot';
+    if (fx && tehoste !== 'normaali') { kurpitsaTehoste = tehoste; tehoste = fx.aseta('normaali'); }
+    noitaKuva.play().catch(() => {});
+    noitaKuva.style.transition = 'opacity .8s ease';
+    noitaKuva.style.opacity = 1;
+    lahetaTila();
+  }
+  function piilotaKasvot(nopeasti) {
+    noitaKuva.style.transition = 'opacity ' + (nopeasti ? '.35s' : '.8s') + ' ease';
+    noitaKuva.style.opacity = 0;
+    if (fx && kurpitsaTehoste) { tehoste = fx.aseta(kurpitsaTehoste); kurpitsaTehoste = null; }
+  }
+  // Muutu kurpitsaksi: savu nousee, peittää kuvan, ja savun hälvetessä kurpitsa syttyy
+  let muuttuu = false;
+  function muutuKurpitsaksi() {
+    if (hereilla || muuttuu) return;
+    muuttuu = true;
+    Savu.puhalla();
+    setTimeout(() => piilotaKasvot(true), 650);
+    setTimeout(() => { muuttuu = false; moodi = 'kurpitsa'; heraa(); }, 1150);
+  }
+
+  const Savu = (() => {
+    const c = $('savu'), g = c.getContext('2d');
+    let hiukkaset = [], kaynnissa = false, alku = 0, W = 0, H = 0;
+    // valmiit savutuprut (pehmeät, epätasaiset pilvet)
+    const VARIT = ['170,170,165', '125,170,125', '150,115,190'];
+    const tuprut = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(n => {
+      const k = document.createElement('canvas'); k.width = k.height = 256;
+      const x = k.getContext('2d');
+      for (let i = 0; i < 26; i++) {
+        const r = 30 + Math.random() * 60, px = 128 + (Math.random() - .5) * 120, py = 128 + (Math.random() - .5) * 120;
+        const gr = x.createRadialGradient(px, py, 0, px, py, r);
+        gr.addColorStop(0, 'rgba(' + VARIT[n % 3] + ',.22)'); gr.addColorStop(1, 'rgba(' + VARIT[n % 3] + ',0)');
+        x.fillStyle = gr; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+      }
+      return k;
+    });
+    function koko() { W = c.width = Math.round(innerWidth * 0.5); H = c.height = Math.round(innerHeight * 0.5); }
+    addEventListener('resize', koko);
+    function puhalla() {
+      koko();
+      const n = 140;
+      for (let i = 0; i < n; i++) {
+        const viive = Math.random() * 700;
+        hiukkaset.push({
+          x: W * (0.1 + Math.random() * 0.8), y: H * (0.75 + Math.random() * 0.45),
+          vx: (Math.random() - .5) * W * 0.00025, vy: -H * (0.00035 + Math.random() * 0.0005),
+          r: Math.min(W, H) * (0.12 + Math.random() * 0.18), kasvu: 1.0006 + Math.random() * 0.0008,
+          kierto: Math.random() * 6.3, vk: (Math.random() - .5) * 0.0015,
+          syntyy: viive, elaa: 1900 + Math.random() * 1400, tuppu: tuprut[i % tuprut.length]
+        });
+      }
+      alku = performance.now();
+      if (!kaynnissa) { kaynnissa = true; requestAnimationFrame(piirra); }
+    }
+    let edellinen = 0;
+    function piirra(t) {
+      const dt = Math.min(50, edellinen ? t - edellinen : 16); edellinen = t;
+      const kulunut = t - alku;
+      g.clearRect(0, 0, W, H);
+      // vihreä-oranssi välähdys muutoksen hetkellä
+      const v = Math.max(0, 1 - Math.abs(kulunut - 1050) / 350);
+      if (v > 0) {
+        const gr = g.createRadialGradient(W / 2, H * .5, 0, W / 2, H * .5, Math.max(W, H) * .6);
+        gr.addColorStop(0, 'rgba(255,170,60,' + (0.55 * v) + ')'); gr.addColorStop(1, 'rgba(255,120,20,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      }
+      hiukkaset = hiukkaset.filter(p => kulunut < p.syntyy + p.elaa);
+      for (const p of hiukkaset) {
+        const ika = kulunut - p.syntyy; if (ika < 0) continue;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.r *= Math.pow(p.kasvu, dt); p.kierto += p.vk * dt;
+        const e = ika / p.elaa;
+        const a = Math.min(1, e * 5) * Math.pow(1 - e, 1.4);
+        g.save();
+        g.globalAlpha = a * 0.95;
+        g.translate(p.x, p.y); g.rotate(p.kierto);
+        g.drawImage(p.tuppu, -p.r, -p.r, p.r * 2, p.r * 2);
+        g.restore();
+      }
+      if (hiukkaset.length) requestAnimationFrame(piirra);
+      else { kaynnissa = false; edellinen = 0; g.clearRect(0, 0, W, H); }
+    }
+    return { puhalla };
+  })();
+
   // ---------- yhteys ----------
   let peer = null, puhelu = null, ohjaus = null, omaStream = null, huone = '';
 
@@ -264,7 +367,7 @@
     if (!ohjaus || !ohjaus.open) return;
     const tehosteet = {};
     Object.keys(Aanitehosteet.TEHOSTEET).forEach(k => tehosteet[k] = Aanitehosteet.TEHOSTEET[k].nimi);
-    ohjaus.send({ k: 'tila', hereilla, tehoste, voimakkuus, herkkyys: Number($('herkkyys').value), ilmeet: $('ilmeet').value,
+    ohjaus.send({ k: 'tila', hereilla, moodi, tehoste: kurpitsaTehoste || tehoste, voimakkuus, herkkyys: Number($('herkkyys').value), ilmeet: $('ilmeet').value,
       mikki: !!(omaStream && omaStream.getAudioTracks().some(t => t.enabled)),
       kamera: !!(omaStream && omaStream.getVideoTracks().length), varavideo: !!varaUrl, tehosteet });
   }
@@ -272,9 +375,10 @@
   function komento(d) {
     if (!d || typeof d !== 'object') return;
     switch (d.k) {
-      case 'heraa': heraa(); break;
+      case 'heraa': muutuKurpitsaksi(); break;
+      case 'kasvot': naytaKasvot(); break;
       case 'nuku': nuku(); break;
-      case 'tehoste': tehoste = fx.aseta(d.nimi); break;
+      case 'tehoste': if (moodi === 'kasvot') kurpitsaTehoste = d.nimi; else tehoste = fx.aseta(d.nimi); break;
       case 'mikki': if (omaStream) omaStream.getAudioTracks().forEach(t => t.enabled = !!d.paalla); break;
       case 'voimakkuus': voimakkuus = Math.max(0, Math.min(2.5, Number(d.arvo) || 0)); paavoimakkuus.gain.setTargetAtTime(voimakkuus, ctx.currentTime, 0.05); break;
       case 'herkkyys': $('herkkyys').value = d.arvo; break;
@@ -300,7 +404,7 @@
       if (puhelu) { try { puhelu.close(); } catch (e) {} }
       puhelu = c;
       c.answer(omaStream || undefined);
-      c.on('stream', s => { kytkeAani(s, true); });
+      c.on('stream', s => { kytkeAani(s, true); noitaKuva.srcObject = s; noitaKuva.play().catch(() => {}); });
       let valmis = false;
       Yhteys.seuraaIce(c, st => {
         if (puhelu !== c) return;
@@ -311,7 +415,7 @@
         } else if (st === 'failed') { asetaPiste('odottaa'); tila('Puhelu ei saanut suoraa yhteyttä, odotetaan uutta yritystä'); }
         else if (!valmis) tila('Noita soittaa… (' + st + ')');
       });
-      c.on('close', () => { if (puhelu === c) { puhelu = null; kytkeAani(null); asetaPiste('odottaa'); tila('Puhelu päättyi, odotetaan uutta'); } });
+      c.on('close', () => { if (puhelu === c) { puhelu = null; kytkeAani(null); if (moodi === 'kasvot') nuku(); asetaPiste('odottaa'); tila('Puhelu päättyi, odotetaan uutta'); } });
       c.on('error', err => console.log('puhelu-virhe', err));
     });
     peer.on('connection', c => {
@@ -398,11 +502,12 @@
   // Testaukseen: näppäimistöllä H = herää, N = nuku
   document.addEventListener('keydown', e => {
     if (lava.style.display !== 'block') return;
-    if (e.key === 'h' || e.key === 'H') heraa();
+    if (e.key === 'h' || e.key === 'H') muutuKurpitsaksi();
+    if (e.key === 'k' || e.key === 'K') naytaKasvot();
     if (e.key === 'n' || e.key === 'N') nuku();
   });
 
-  window.__kurpitsa = { get taso() { return taso; }, get nakyva() { return nakyva.getAttribute('src'); }, get ilme() { return ilme; }, get hereilla() { return hereilla; },
+  window.__kurpitsa = { get taso() { return taso; }, get nakyva() { return nakyva.getAttribute('src'); }, get ilme() { return ilme; }, get hereilla() { return hereilla; }, get moodi() { return moodi; },
     get tehoste() { return tehoste; }, get voimakkuus() { return voimakkuus; } };
 })();
 </script>
