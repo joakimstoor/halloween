@@ -139,33 +139,21 @@
   requestAnimationFrame(mittari);
 
   // ---------- oma etukamera (Näytä kasvot) ----------
+  // Kamera pyydetään yhdessä mikrofonin kanssa ja lähetetään koko ajan, mutta pois päältä (musta kuva).
+  // Näytä kasvot vain kytkee sen päälle (puhelimet eivät tykkää vaihtaa videoraitaa kesken puhelun).
   let kamera = null, kameraPois = null;
-  function videoLahettaja() {
-    const pc = puhelu && puhelu.peerConnection;
-    return pc ? pc.getSenders().find(x => x.track ? x.track.kind === 'video' : false) || pc.getSenders().find(x => !x.track) : null;
-  }
-  async function kameraPaalle() {
+  function kameraPaalle() {
     clearTimeout(kameraPois);
-    if (!kamera || kamera.readyState !== 'live') {
-      try {
-        const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } } });
-        kamera = st.getVideoTracks()[0];
-      } catch (e) { viesti('Kameraa ei saatu (' + e.name + '). Salli kamera selaimen asetuksista.'); return false; }
-    }
-    const l = videoLahettaja();
-    if (!l) { viesti('Ei yhteyttä tablettiin.'); return false; }
-    await l.replaceTrack(kamera);
-    $('oma').srcObject = new MediaStream([kamera]); $('oma').style.display = 'block';
+    if (!kamera || kamera.readyState !== 'live') { viesti('Kameraa ei ole käytössä. Salli kamera ja yhdistä uudelleen.'); return false; }
+    kamera.enabled = true;
+    $('oma').srcObject = new MediaStream([kamera]); $('oma').play().catch(() => {}); $('oma').style.display = 'block';
     return true;
   }
-  // kamera pois vasta kun savu on peittänyt kasvot tabletilla
   function kameraPoisViiveella(ms) {
     clearTimeout(kameraPois);
-    kameraPois = setTimeout(async () => {
-      const l = videoLahettaja();
-      try { if (l) await l.replaceTrack(mustaKuva()); } catch (e) {}
-      if (kamera) { kamera.stop(); kamera = null; }
-      $('oma').style.display = 'none'; $('oma').srcObject = null;
+    kameraPois = setTimeout(() => {
+      if (kamera) kamera.enabled = false;
+      $('oma').style.display = 'none';
     }, ms);
   }
 
@@ -173,10 +161,10 @@
   let mustaRaita = null;
   function mustaKuva() {
     if (mustaRaita && mustaRaita.readyState === 'live') return mustaRaita;
-    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
-    const g = c.getContext('2d'); g.fillRect(0, 0, 16, 16);
-    mustaRaita = c.captureStream(1).getVideoTracks()[0];
-    setInterval(() => g.fillRect(0, 0, 16, 16), 1000);
+    const c = document.createElement('canvas'); c.width = 320; c.height = 240;
+    const g = c.getContext('2d'); g.fillRect(0, 0, 320, 240);
+    mustaRaita = c.captureStream(5).getVideoTracks()[0];
+    setInterval(() => g.fillRect(0, 0, 320, 240), 200);
     return mustaRaita;
   }
 
@@ -196,7 +184,7 @@
     ohjaus.on('error', e => console.log('ohjaus-virhe', e));
 
     // Mukaan pieni musta kuva, jotta yhteyteen tulee videokanava ja tabletin kamerakuva pääsee takaisin puhelimeen
-    puhelu = peer.call(kohde, new MediaStream([...mikki.getAudioTracks(), mustaKuva()]));
+    puhelu = peer.call(kohde, new MediaStream([...mikki.getAudioTracks(), (kamera && kamera.readyState === 'live') ? kamera : mustaKuva()]));
     puhelu.on('stream', s => {
       $('kuva').srcObject = s;
       $('kuva').muted = !$('kaiutin').classList.contains('on');
@@ -241,7 +229,7 @@
     $('heraa').classList.toggle('paalla', d.hereilla);
     $('kasvoNappi').classList.toggle('paalla', d.moodi === 'kasvot');
     $('nuku').classList.toggle('paalla', d.moodi === 'musta');
-    if (d.moodi === 'kasvot' && (!kamera || videoLahettaja()?.track !== kamera)) kameraPaalle();
+    if (d.moodi === 'kasvot' && !(kamera && kamera.enabled)) kameraPaalle();
     if (d.moodi !== 'kasvot' && edellinen === 'kasvot') kameraPoisViiveella(d.moodi === 'kurpitsa' ? 1500 : 900);
     if (d.tehosteet && !$('tehosteet').children.length) rakennaTehosteet(d.tehosteet);
     [...$('tehosteet').children].forEach(b => b.classList.toggle('valittu', b.dataset.nimi === d.tehoste));
@@ -273,7 +261,17 @@
     Yhteys.muista('hw26-huone', $('huone').value);
     $('yhdista').disabled = true;
     try {
-      mikki = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      const aani = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+      try {
+        mikki = await navigator.mediaDevices.getUserMedia({ audio: aani,
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } } });
+        kamera = mikki.getVideoTracks()[0] || null;
+        if (kamera) { kamera.enabled = false; mikki.removeTrack(kamera); }
+      } catch (e) {
+        console.log('kamera ei onnistunut, vain mikrofoni', e);
+        mikki = await navigator.mediaDevices.getUserMedia({ audio: aani });
+        kamera = null;
+      }
     } catch (e) {
       tila('Mikrofonia ei saatu (' + e.name + '). Salli mikrofoni selaimen asetuksista.');
       $('yhdista').disabled = false; return;
@@ -297,7 +295,7 @@
     });
   });
 
-  $('kasvoNappi').onclick = async () => { if (!(ohjaus && ohjaus.open)) { viesti('Ei yhteyttä tablettiin.'); return; } if (await kameraPaalle()) laheta({ k: 'kasvot' }); };
+  $('kasvoNappi').onclick = () => { if (!(ohjaus && ohjaus.open)) { viesti('Ei yhteyttä tablettiin.'); return; } if (kameraPaalle()) laheta({ k: 'kasvot' }); };
   $('heraa').onclick = () => laheta({ k: 'heraa' });
   $('nuku').onclick = () => laheta({ k: 'nuku' });
   $('virne').onclick = () => laheta({ k: 'ilme', nimi: 'virne', kesto: 4000 });
@@ -326,7 +324,7 @@
     try { peer && peer.destroy(); } catch (e) {}
     if (mikki) mikki.getTracks().forEach(t => t.stop());
     if (mustaRaita) { mustaRaita.stop(); mustaRaita = null; }
-    clearTimeout(kameraPois); if (kamera) { kamera.stop(); kamera = null; } $('oma').style.display = 'none';
+    clearTimeout(kameraPois); if (kamera) { kamera.stop(); kamera = null; } $('oma').style.display = 'none'; $('oma').srcObject = null;
     if (actx) actx.close();
     peer = puhelu = ohjaus = mikki = null; analysoija = null;
     $('tehosteet').innerHTML = '';
