@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Puhuva kurpitsa</title>
+<style>
+  :root { --oranssi: #ff8a1f; --tausta: #0d0b08; --kortti: #1a1611; --reuna: #3a2f22; --teksti: #f3eadf; --himmea: #b3a594; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--teksti);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+
+  /* ---------- aloitusnäkymä ---------- */
+  #aloitus { position: fixed; inset: 0; overflow-y: auto; padding: 24px 16px 48px; background: var(--tausta);
+    display: flex; justify-content: center; }
+  .kortti { width: 100%; max-width: 560px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  h1 span { color: var(--oranssi); }
+  p.vihje { color: var(--himmea); font-size: 14px; line-height: 1.45; margin: 4px 0 14px; }
+  label.otsikko { display: block; font-size: 14px; color: var(--himmea); margin: 18px 0 6px; }
+  input[type=text], input[type=number] { width: 100%; font-size: 18px; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--reuna); background: #0a0806; color: var(--teksti); }
+  .valinta { display: flex; gap: 12px; align-items: center; padding: 12px; margin-top: 8px; border-radius: 10px;
+    background: var(--kortti); border: 1px solid var(--reuna); font-size: 15px; }
+  .valinta input { width: 22px; height: 22px; accent-color: var(--oranssi); flex: none; }
+  select { width: 100%; font-size: 16px; padding: 12px; border-radius: 10px; border: 1px solid var(--reuna); background: #0a0806; color: var(--teksti); }
+  input[type=range] { width: 100%; accent-color: var(--oranssi); }
+  button { font: inherit; border: 0; border-radius: 12px; cursor: pointer; }
+  #aloita { width: 100%; margin-top: 24px; padding: 18px; font-size: 21px; font-weight: 700; background: var(--oranssi); color: #1a0d00; }
+  #aloita:disabled { opacity: .4; }
+  .toissijainen { width: 100%; margin-top: 10px; padding: 14px; font-size: 16px; background: #2a231b; color: var(--teksti); }
+  #tila { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: #000; font-size: 14px; color: var(--himmea); min-height: 40px; }
+  #tiedosto { display: none; }
+  .tiedostonappi { display: inline-block; padding: 10px 14px; border-radius: 10px; background: #2a231b; font-size: 15px; cursor: pointer; }
+  #varanimi { font-size: 13px; color: var(--himmea); margin-left: 8px; }
+
+  /* ---------- kurpitsanäkymä ---------- */
+  #lava { position: fixed; inset: 0; background: #000; display: none; }
+  #kasvot { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s ease; will-change: transform, filter; }
+  #kasvot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; visibility: hidden; }
+  #kasvot img.nakyy { visibility: visible; }
+  #vara { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; mix-blend-mode: screen; }
+  #kulma { position: absolute; left: 0; top: 0; width: 90px; height: 90px; }
+  #piste { position: absolute; right: 10px; bottom: 10px; width: 8px; height: 8px; border-radius: 50%; background: #600; opacity: .5; }
+  #piste.odottaa { background: #a60; } #piste.yhdistetty { background: #2a2; }
+  #piste.piilo { display: none; }
+  #testiohje { position: absolute; left: 0; right: 0; bottom: 24px; text-align: center; color: #777; font-size: 15px; display: none; }
+</style>
+</head>
+<body>
+
+<div id="aloitus">
+  <div class="kortti">
+    <h1>🎃 Puhuva <span>kurpitsa</span></h1>
+    <p class="vihje">Tämä on <b>tabletin</b> sivu. Kirjoita huoneen nimi (sama kuin puhelimessa), paina <b>Aloita</b> ja salli kamera ja mikrofoni.
+      Näyttö muuttuu mustaksi ja odottaa puhelua. Takaisin tähän: paina vasenta yläkulmaa 3 sekuntia.</p>
+
+    <label class="otsikko" for="huone">Huoneen nimi (salainen sana, sama molemmissa laitteissa)</label>
+    <input id="huone" type="text" autocomplete="off" autocapitalize="none" placeholder="esim. stoorin-kurpitsa-2026">
+
+    <label class="otsikko">Asetukset</label>
+    <label class="valinta"><input type="checkbox" id="kamera" checked> Lähetä tabletin kamerakuva puhelimeen (näet lapset)</label>
+    <label class="valinta"><input type="checkbox" id="mikki" checked> Lähetä tabletin mikrofoni puhelimeen (kuulet lapset)</label>
+    <label class="valinta"><input type="checkbox" id="heraaHeti"> Kurpitsa syttyy heti, kun puhelu yhdistyy (muuten vasta Herätä-napista)</label>
+    <label class="valinta"><input type="checkbox" id="naytaPiste" checked> Näytä pieni yhteysvalo oikeassa alakulmassa</label>
+
+    <label class="otsikko" for="herkkyys">Suun herkkyys: <span id="herkkyysArvo">5</span></label>
+    <input type="range" id="herkkyys" min="1" max="10" value="5">
+
+    <label class="otsikko" for="ilmeet">Ilmeet (virne ja vino hymy)</label>
+    <select id="ilmeet">
+      <option value="auto">Kurpitsa virnistää välillä itsestään (ja puhelimen napeista)</option>
+      <option value="nappi">Vain puhelimen napeista</option>
+    </select>
+
+    <label class="otsikko">Varavideo (valinnainen; soitetaan puhelimen napista, jos yhteys pettää)</label>
+    <label class="tiedostonappi" for="tiedosto">🎬 Valitse video</label><span id="varanimi">ei valittu</span>
+    <input id="tiedosto" type="file" accept="video/*">
+
+    <button id="aloita">Aloita</button>
+    <button id="testaa" class="toissijainen" type="button">Testaa suuta omalla äänellä (ilman puhelinta)</button>
+    <div id="tila">Kuvia ladataan…</div>
+  </div>
+</div>
+
+<div id="lava">
+  <div id="kasvot"></div>
+  <video id="vara" playsinline></video>
+  <div id="testiohje">Testitila: puhu tabletille. Takaisin: vasen yläkulma 3 s.</div>
+  <div id="kulma"></div>
+  <div id="piste"></div>
+</div>
+
+<script src="peerjs.min.js"></script>
+<script src="yhteys.js"></script>
+<script src="aanitehosteet.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  // Kuvasarjat: tavallinen suu 10 asentoa, virne ja vino hymy 5 asentoa
+  const SARJAT = { suu: 10, virne: 5, vino: 5 };
+  const KAIKKIA = Object.values(SARJAT).reduce((a, b) => a + b, 0);
+  const aloitus = $('aloitus'), lava = $('lava'), kasvot = $('kasvot'), piste = $('piste'), vara = $('vara');
+
+  // ---------- kuvat ----------
+  const kuvat = {}, puuttuu = {};
+  let ladattu = 0;
+  Object.keys(SARJAT).forEach(sarja => {
+    kuvat[sarja] = [];
+    for (let i = 0; i < SARJAT[sarja]; i++) {
+      const img = new Image();
+      img.src = 'kuvat/' + sarja + '_' + i + '.jpg';
+      img.alt = '';
+      img.onerror = () => { puuttuu[sarja] = true; valmis(); };
+      img.onload = valmis;
+      kasvot.appendChild(img);
+      kuvat[sarja].push(img);
+    }
+  });
+  function valmis() { if (++ladattu === KAIKKIA) tila('Valmis. Kirjoita huoneen nimi ja paina Aloita.'); }
+  let nakyva = kuvat.suu[0];
+  nakyva.classList.add('nakyy');
+  // taso 0–1 -> oikea kuva valitusta sarjasta (jos ilmekuvat puuttuvat, käytetään tavallista suuta)
+  function naytaSuu(sarja, taso) {
+    if (puuttuu[sarja]) sarja = 'suu';
+    const img = kuvat[sarja][Math.round(taso * (SARJAT[sarja] - 1))];
+    if (img === nakyva) return;
+    nakyva.classList.remove('nakyy');
+    img.classList.add('nakyy');
+    nakyva = img;
+  }
+
+  // ---------- ilmeet: virne ja vino hymy ----------
+  // tila 'auto' = kurpitsa virnistää välillä itsestään, 'nappi' = vain puhelimen napista
+  let ilme = 'suu', ilmeLoppuu = 0, seuraavaIlme = 0;
+  function asetaIlme(nimi, kesto) {
+    ilme = SARJAT[nimi] ? nimi : 'suu';
+    ilmeLoppuu = performance.now() + (kesto || 4000);
+  }
+  function paivitaIlme(t, puhuu) {
+    if (ilme !== 'suu' && t > ilmeLoppuu) { ilme = 'suu'; seuraavaIlme = t + 5000 + Math.random() * 9000; }
+    if (!hereilla || $('ilmeet').value !== 'auto' || ilme !== 'suu') return;
+    if (!seuraavaIlme) seuraavaIlme = t + 4000 + Math.random() * 6000;
+    if (t > seuraavaIlme) {
+      // hiljaisuudessa virnistää useammin, puhuessa harvemmin
+      if (!puhuu || Math.random() < 0.4) asetaIlme(Math.random() < 0.5 ? 'virne' : 'vino', 1800 + Math.random() * 3500);
+      seuraavaIlme = t + 5000 + Math.random() * 9000;
+    }
+  }
+
+  // ---------- asetukset ----------
+  $('huone').value = Yhteys.alkuHuone();
+  const muistetut = ['kamera', 'mikki', 'heraaHeti', 'naytaPiste'];
+  muistetut.forEach(id => { const v = Yhteys.muista('hw26-' + id); if (v !== null) $(id).checked = v === '1';
+    $(id).addEventListener('change', () => Yhteys.muista('hw26-' + id, $(id).checked ? '1' : '0')); });
+  const h = Yhteys.muista('hw26-herkkyys'); if (h) $('herkkyys').value = h;
+  $('herkkyysArvo').textContent = $('herkkyys').value;
+  const il = Yhteys.muista('hw26-ilmeet'); if (il) $('ilmeet').value = il;
+  $('ilmeet').addEventListener('change', () => Yhteys.muista('hw26-ilmeet', $('ilmeet').value));
+  $('herkkyys').addEventListener('input', () => { $('herkkyysArvo').textContent = $('herkkyys').value; Yhteys.muista('hw26-herkkyys', $('herkkyys').value); });
+
+  let varaUrl = null;
+  $('tiedosto').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (varaUrl) URL.revokeObjectURL(varaUrl);
+    varaUrl = f ? URL.createObjectURL(f) : null;
+    $('varanimi').textContent = f ? f.name : 'ei valittu';
+  });
+
+  function tila(teksti) { $('tila').textContent = teksti; console.log('[kurpitsa]', teksti); }
+
+  // ---------- ääni ----------
+  let ctx, fx, analysoija, paavoimakkuus, lahde = null, oma = null, etaAudio = null;
+  let tehoste = 'kurpitsa', voimakkuus = 1.0;
+
+  function alustaAani() {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    fx = Aanitehosteet.luo(ctx);
+    fx.aseta(tehoste);
+    analysoija = ctx.createAnalyser();
+    analysoija.fftSize = 1024;
+    paavoimakkuus = ctx.createGain();
+    paavoimakkuus.gain.value = voimakkuus;
+    const kompressori = ctx.createDynamicsCompressor();
+    kompressori.threshold.value = -18; kompressori.ratio.value = 4;
+    fx.ulos.connect(paavoimakkuus); paavoimakkuus.connect(kompressori); kompressori.connect(ctx.destination);
+  }
+
+  function kytkeAani(stream, kuuluu) {
+    if (lahde) { try { lahde.disconnect(); } catch (e) {} lahde = null; }
+    if (!stream || !stream.getAudioTracks().length) return;
+    // Chrome-kikka: etäpuhelun ääni kulkee Web Audioon vasta, kun se on liitetty (mykistettyyn) audio-elementtiin
+    if (!etaAudio) { etaAudio = new Audio(); etaAudio.muted = true; }
+    etaAudio.srcObject = stream;
+    etaAudio.play().catch(() => {});
+    lahde = ctx.createMediaStreamSource(stream);
+    lahde.connect(analysoija);
+    if (kuuluu) lahde.connect(fx.sisaan);
+    if (ctx.state !== 'running') ctx.resume();
+  }
+
+  // ---------- kurpitsan animaatio ----------
+  let hereilla = false, taso = 0, puheAika = 0;
+  const data = new Float32Array(1024);
+  function kehys(t) {
+    let tavoite = 0;
+    if (analysoija && lahde) {
+      analysoija.getFloatTimeDomainData(data);
+      let s = 0; for (let i = 0; i < data.length; i++) s += data[i] * data[i];
+      const db = 20 * Math.log10(Math.sqrt(s / data.length) + 1e-9);
+      const herkkyys = Number($('herkkyys').value);          // 1–10
+      const ala = -52 + herkkyys * 0.8, yla = ala + 30 - herkkyys * 1.2;
+      tavoite = Math.min(1, Math.max(0, (db - ala) / (yla - ala)));
+    }
+    taso += (tavoite - taso) * (tavoite > taso ? 0.55 : 0.22);
+    if (taso > 0.15) puheAika = t;
+    paivitaIlme(t, t - puheAika < 800);
+    naytaSuu(ilme, taso);
+
+    // lepattava valo ja hidas keinunta
+    const s = t / 1000;
+    const lepatus = 0.93 + 0.05 * Math.sin(s * 11.3) * Math.sin(s * 3.7) + 0.04 * Math.random() + 0.12 * taso;
+    kasvot.style.filter = 'brightness(' + lepatus.toFixed(3) + ')';
+    kasvot.style.transform = 'translateY(' + (6 * Math.sin(s * 1.3) - 10 * taso).toFixed(1) + 'px) rotate(' + (1.5 * Math.sin(s * 0.6)).toFixed(2) + 'deg) scale(' + (1 + 0.015 * taso).toFixed(3) + ')';
+    requestAnimationFrame(kehys);
+  }
+  requestAnimationFrame(kehys);
+
+  function heraa() {
+    if (hereilla) return;
+    hereilla = true;
+    if ($('ilmeet').value === 'auto') asetaIlme('virne', 2600);   // herää ilkeästi virnistäen
+    kasvot.style.transition = 'opacity 1.6s cubic-bezier(.6,0,.9,.5)';
+    kasvot.style.opacity = 1;
+    lahetaTila();
+  }
+  function nuku() {
+    hereilla = false;
+    kasvot.style.transition = 'opacity 1.2s ease';
+    kasvot.style.opacity = 0;
+    lahetaTila();
+  }
+
+  function soitaVaravideo() {
+    if (!varaUrl) return false;
+    const oliHereilla = hereilla;
+    nuku();
+    vara.src = varaUrl; vara.style.display = 'block';
+    vara.play().catch(e => console.log('varavideo', e));
+    vara.onended = () => { vara.style.display = 'none'; vara.removeAttribute('src'); vara.load(); if (oliHereilla) heraa(); };
+    return true;
+  }
+
+  // ---------- yhteys ----------
+  let peer = null, puhelu = null, ohjaus = null, omaStream = null, huone = '';
+
+  function asetaPiste(luokka) {
+    piste.className = luokka + ($('naytaPiste').checked ? '' : ' piilo');
+  }
+
+  function lahetaTila() {
+    if (!ohjaus || !ohjaus.open) return;
+    const tehosteet = {};
+    Object.keys(Aanitehosteet.TEHOSTEET).forEach(k => tehosteet[k] = Aanitehosteet.TEHOSTEET[k].nimi);
+    ohjaus.send({ k: 'tila', hereilla, tehoste, voimakkuus, herkkyys: Number($('herkkyys').value), ilmeet: $('ilmeet').value,
+      mikki: !!(omaStream && omaStream.getAudioTracks().some(t => t.enabled)),
+      kamera: !!(omaStream && omaStream.getVideoTracks().length), varavideo: !!varaUrl, tehosteet });
+  }
+
+  function komento(d) {
+    if (!d || typeof d !== 'object') return;
+    switch (d.k) {
+      case 'heraa': heraa(); break;
+      case 'nuku': nuku(); break;
+      case 'tehoste': tehoste = fx.aseta(d.nimi); break;
+      case 'mikki': if (omaStream) omaStream.getAudioTracks().forEach(t => t.enabled = !!d.paalla); break;
+      case 'voimakkuus': voimakkuus = Math.max(0, Math.min(2.5, Number(d.arvo) || 0)); paavoimakkuus.gain.setTargetAtTime(voimakkuus, ctx.currentTime, 0.05); break;
+      case 'herkkyys': $('herkkyys').value = d.arvo; break;
+      case 'ilme': asetaIlme(d.nimi, d.kesto || 4000); break;
+      case 'ilmetila': $('ilmeet').value = d.arvo === 'auto' ? 'auto' : 'nappi'; Yhteys.muista('hw26-ilmeet', $('ilmeet').value); break;
+      case 'varavideo': if (!soitaVaravideo()) ohjaus.send({ k: 'viesti', teksti: 'Tabletille ei ole valittu varavideota.' }); break;
+    }
+    lahetaTila();
+  }
+
+  function kaynnistaPeer() {
+    if (peer) { try { peer.destroy(); } catch (e) {} }
+    peer = new Peer(Yhteys.kurpitsaId(huone), Yhteys.peerAsetukset());
+    asetaPiste('');
+    peer.on('open', () => { asetaPiste('odottaa'); tila('Odottaa noidan puhelua huoneessa "' + huone + '"'); });
+    peer.on('disconnected', () => { asetaPiste(''); setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000); });
+    peer.on('error', e => {
+      console.log('peer-virhe', e.type, e);
+      if (e.type === 'unavailable-id') { tila('Huone on vielä varattu (edellinen yhteys sulkeutuu). Yritetään uudelleen…'); setTimeout(kaynnistaPeer, 5000); }
+      else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type)) { tila('Ei yhteyttä palvelimeen, yritetään uudelleen…'); setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) peer.reconnect(); else if (peer && peer.destroyed) kaynnistaPeer(); }, 4000); }
+    });
+    peer.on('call', c => {
+      if (puhelu) { try { puhelu.close(); } catch (e) {} }
+      puhelu = c;
+      c.answer(omaStream || undefined);
+      c.on('stream', s => {
+        kytkeAani(s, true);
+        asetaPiste('yhdistetty');
+        tila('Noita on linjoilla');
+        if ($('heraaHeti').checked) heraa();
+      });
+      c.on('close', () => { if (puhelu === c) { puhelu = null; kytkeAani(null); asetaPiste('odottaa'); tila('Puhelu päättyi, odotetaan uutta'); } });
+      c.on('error', err => console.log('puhelu-virhe', err));
+    });
+    peer.on('connection', c => {
+      if (ohjaus && ohjaus !== c) { try { ohjaus.close(); } catch (e) {} }
+      ohjaus = c;
+      c.on('open', lahetaTila);
+      c.on('data', komento);
+      c.on('close', () => { if (ohjaus === c) ohjaus = null; });
+    });
+  }
+
+  async function pyydaMedia() {
+    const haluaKamera = $('kamera').checked, haluaMikki = $('mikki').checked;
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: haluaKamera ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 20 } } : false
+      }).then(s => { s.getAudioTracks().forEach(t => t.enabled = haluaMikki); return s; });
+    } catch (e) {
+      tila('Kameraa/mikrofonia ei saatu (' + e.name + '). Kurpitsa toimii silti, mutta et näe/kuule lapsia.');
+      return null;
+    }
+  }
+
+  async function koko() {
+    try { await document.documentElement.requestFullscreen(); } catch (e) {}
+    pyydaWakeLock();
+  }
+  async function pyydaWakeLock() { try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (e) {} }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && lava.style.display === 'block') pyydaWakeLock(); });
+
+  function naytaLava() {
+    aloitus.style.display = 'none';
+    lava.style.display = 'block';
+  }
+
+  $('aloita').addEventListener('click', async () => {
+    huone = Yhteys.puhdista($('huone').value);
+    if (!huone || huone.length < 4) { tila('Kirjoita huoneen nimi (vähintään 4 merkkiä).'); $('huone').focus(); return; }
+    Yhteys.muista('hw26-huone', $('huone').value);
+    $('aloita').disabled = true;
+    alustaAani();
+    await ctx.resume();
+    await koko();
+    if (!omaStream) omaStream = await pyydaMedia();
+    $('testiohje').style.display = 'none';
+    naytaLava();
+    nuku();
+    kaynnistaPeer();
+    $('aloita').disabled = false;
+  });
+
+  // Testitila: tabletin oma mikrofoni ohjaa suuta (ääntä ei toisteta, ettei synny kiertoa)
+  $('testaa').addEventListener('click', async () => {
+    alustaAani();
+    await ctx.resume();
+    try { oma = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e) { tila('Mikrofonia ei saatu: ' + e.name); return; }
+    await koko();
+    kytkeAani(oma, false);
+    $('testiohje').style.display = 'block';
+    naytaLava();
+    hereilla = false; heraa();
+  });
+
+  // Piilotettu kulma: 3 s painallus = takaisin asetuksiin
+  let ajastin = null;
+  const peru = () => { clearTimeout(ajastin); ajastin = null; };
+  $('kulma').addEventListener('pointerdown', () => {
+    ajastin = setTimeout(() => {
+      nuku();
+      if (oma) { oma.getTracks().forEach(t => t.stop()); oma = null; kytkeAani(null); }
+      if (peer) { try { peer.destroy(); } catch (e) {} peer = null; puhelu = null; ohjaus = null; }
+      kytkeAani(null);
+      vara.pause(); vara.style.display = 'none';
+      lava.style.display = 'none'; aloitus.style.display = 'flex';
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      tila('Pysäytetty. Paina Aloita jatkaaksesi.');
+    }, 3000);
+  });
+  $('kulma').addEventListener('pointerup', peru);
+  $('kulma').addEventListener('pointerleave', peru);
+
+  // Testaukseen: näppäimistöllä H = herää, N = nuku
+  document.addEventListener('keydown', e => {
+    if (lava.style.display !== 'block') return;
+    if (e.key === 'h' || e.key === 'H') heraa();
+    if (e.key === 'n' || e.key === 'N') nuku();
+  });
+
+  window.__kurpitsa = { get taso() { return taso; }, get nakyva() { return nakyva.getAttribute('src'); }, get ilme() { return ilme; }, get hereilla() { return hereilla; },
+    get tehoste() { return tehoste; }, get voimakkuus() { return voimakkuus; } };
+})();
+</script>
+</body>
+</html>

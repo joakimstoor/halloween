@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0b08">
+<title>Noidan kaukosäädin</title>
+<style>
+  :root { --oranssi: #ff8a1f; --vihrea: #6fdc4a; --punainen: #e5483a; --tausta: #0d0b08; --kortti: #1a1611; --reuna: #3a2f22; --teksti: #f3eadf; --himmea: #b3a594; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--tausta); color: var(--teksti);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+  main { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
+  h1 { font-size: 22px; margin: 4px 0 4px; }
+  h1 span { color: var(--oranssi); }
+  p.vihje { color: var(--himmea); font-size: 14px; line-height: 1.45; margin: 4px 0 12px; }
+  input[type=text] { width: 100%; font-size: 18px; padding: 12px; border-radius: 10px; border: 1px solid var(--reuna); background: #0a0806; color: var(--teksti); }
+  button { font: inherit; border: 0; border-radius: 14px; cursor: pointer; color: var(--teksti); background: #2a231b; }
+  button:disabled { opacity: .4; }
+  #yhdista { width: 100%; margin-top: 12px; padding: 16px; font-size: 20px; font-weight: 700; background: var(--oranssi); color: #1a0d00; }
+  #tila { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: #000; font-size: 15px; display: flex; gap: 10px; align-items: center; }
+  #tila i { width: 12px; height: 12px; border-radius: 50%; background: #600; flex: none; }
+  #tila.odottaa i { background: #c80; } #tila.ok i { background: var(--vihrea); }
+  #paneeli { display: none; }
+  .video { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 14px; overflow: hidden; border: 1px solid var(--reuna); }
+  .video video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .video .ei { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #555; font-size: 14px; }
+  .rivi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .iso { padding: 20px 10px; font-size: 19px; font-weight: 700; }
+  #heraa { background: var(--oranssi); color: #1a0d00; }
+  #heraa.paalla { box-shadow: 0 0 0 3px #fff3 inset, 0 0 24px #ff8a1f88; }
+  #nuku.paalla { background: #3a3a3a; }
+  .ilmenappi { padding: 16px 8px; font-size: 17px; font-weight: 600; }
+  .ilmenappi:active { background: #3a2510; }
+  h2 { font-size: 14px; font-weight: 600; color: var(--himmea); margin: 20px 0 8px; text-transform: uppercase; letter-spacing: .06em; }
+  #tehosteet { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #tehosteet button { padding: 14px 8px; font-size: 15px; border: 2px solid transparent; }
+  #tehosteet button.valittu { border-color: var(--oranssi); background: #3a2510; }
+  .kytkin { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 14px; margin-top: 8px; font-size: 16px; text-align: left; }
+  .kytkin b { font-size: 14px; padding: 4px 10px; border-radius: 99px; background: #444; }
+  .kytkin.on b { background: var(--vihrea); color: #062; }
+  .kytkin.mute b { background: var(--punainen); color: #fff; }
+  .saadin { margin-top: 10px; padding: 12px 14px; background: var(--kortti); border-radius: 14px; border: 1px solid var(--reuna); font-size: 15px; }
+  .saadin input { width: 100%; accent-color: var(--oranssi); margin-top: 6px; }
+  #mittari { height: 8px; border-radius: 4px; background: #222; overflow: hidden; margin-top: 8px; }
+  #mittari div { height: 100%; width: 0; background: var(--oranssi); transition: width .06s linear; }
+  #lopeta { width: 100%; margin-top: 18px; padding: 14px; background: transparent; border: 1px solid var(--reuna); color: var(--himmea); }
+  #viesti { font-size: 14px; color: var(--oranssi); min-height: 18px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🧙‍♀️ Noidan <span>kaukosäädin</span></h1>
+
+  <section id="alku">
+    <p class="vihje">Tämä on <b>puhelimen</b> sivu. Käynnistä ensin tabletin kurpitsasivu. Kirjoita sama huoneen nimi ja paina Yhdistä.
+      <b>Käytä kuulokkeita</b>, ettei lasten ääni kierrä takaisin.</p>
+    <input id="huone" type="text" autocomplete="off" autocapitalize="none" placeholder="huoneen nimi">
+    <button id="yhdista">Yhdistä kurpitsaan</button>
+  </section>
+
+  <div id="tila"><i></i><span id="tilateksti">Ei yhdistetty</span></div>
+
+  <section id="paneeli">
+    <div class="video"><video id="kuva" playsinline autoplay></video><div class="ei" id="eikuvaa">Ei kamerakuvaa</div></div>
+
+    <div class="rivi">
+      <button id="heraa" class="iso">🎃 Herätä</button>
+      <button id="nuku" class="iso">🌑 Sammuta</button>
+    </div>
+
+    <h2>Ilme</h2>
+    <div class="rivi" style="margin-top:0">
+      <button id="virne" class="ilmenappi">😈 Virnistä</button>
+      <button id="vino" class="ilmenappi">😏 Vino hymy</button>
+    </div>
+    <button id="ilmeAuto" class="kytkin on">Virnistää välillä itsestään <b>päällä</b></button>
+
+    <h2>Ääni</h2>
+    <div id="tehosteet"></div>
+
+    <button id="omaMikki" class="kytkin on">Oma mikrofoni <b>päällä</b></button>
+    <div id="mittari"><div></div></div>
+    <button id="lastenAani" class="kytkin on">Kuuntele lapsia (tabletin mikrofoni) <b>päällä</b></button>
+    <button id="kaiutin" class="kytkin on">Lasten ääni tässä puhelimessa <b>kuuluu</b></button>
+
+    <div class="saadin">Kurpitsan äänenvoimakkuus <span id="voimArvo">100 %</span>
+      <input type="range" id="voimakkuus" min="0" max="250" step="5" value="100"></div>
+    <div class="saadin">Suun herkkyys <span id="herkArvo">5</span>
+      <input type="range" id="herkkyys" min="1" max="10" step="1" value="5"></div>
+
+    <button id="varavideo" class="kytkin">🎬 Soita varavideo tabletilla <b>›</b></button>
+    <div id="viesti"></div>
+    <button id="lopeta">Lopeta puhelu</button>
+  </section>
+</main>
+
+<script src="peerjs.min.js"></script>
+<script src="yhteys.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let peer = null, puhelu = null, ohjaus = null, mikki = null, huone = '', lopetettu = true, uusintaAjastin = null;
+  let tabletinTila = {};
+
+  $('huone').value = Yhteys.alkuHuone();
+
+  function tila(teksti, luokka) { $('tilateksti').textContent = teksti; $('tila').className = luokka || ''; console.log('[noita]', teksti); }
+  function viesti(t) { $('viesti').textContent = t || ''; if (t) setTimeout(() => { if ($('viesti').textContent === t) $('viesti').textContent = ''; }, 5000); }
+  function laheta(d) { if (ohjaus && ohjaus.open) { ohjaus.send(d); return true; } viesti('Ei yhteyttä tablettiin.'); return false; }
+
+  // ---------- oman äänen mittari ----------
+  let actx, analysoija;
+  const data = new Float32Array(512);
+  function mittari() {
+    if (analysoija) {
+      analysoija.getFloatTimeDomainData(data);
+      let s = 0; for (let i = 0; i < data.length; i++) s += data[i] * data[i];
+      const db = 20 * Math.log10(Math.sqrt(s / data.length) + 1e-9);
+      $('mittari').firstElementChild.style.width = Math.max(0, Math.min(100, (db + 60) * 2.2)) + '%';
+    }
+    requestAnimationFrame(mittari);
+  }
+  requestAnimationFrame(mittari);
+
+  // ---------- yhteys ----------
+  let mustaRaita = null;
+  function mustaKuva() {
+    if (mustaRaita && mustaRaita.readyState === 'live') return mustaRaita;
+    const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+    const g = c.getContext('2d'); g.fillRect(0, 0, 16, 16);
+    mustaRaita = c.captureStream(1).getVideoTracks()[0];
+    setInterval(() => g.fillRect(0, 0, 16, 16), 1000);
+    return mustaRaita;
+  }
+
+  function soita() {
+    clearTimeout(uusintaAjastin);
+    if (lopetettu || !peer || peer.destroyed || !peer.open) return;
+    if (puhelu && puhelu.open && ohjaus && ohjaus.open) return;   // yhteys on jo kunnossa
+    const kohde = Yhteys.kurpitsaId(huone);
+    tila('Soitetaan kurpitsalle…', 'odottaa');
+    ohjaus = peer.connect(kohde, { reliable: true });
+    ohjaus.on('open', () => { laheta({ k: 'tila?' }); });
+    ohjaus.on('data', vastaanota);
+    ohjaus.on('close', () => katkesi('Ohjausyhteys katkesi'));
+    ohjaus.on('error', e => console.log('ohjaus-virhe', e));
+
+    // Mukaan pieni musta kuva, jotta yhteyteen tulee videokanava ja tabletin kamerakuva pääsee takaisin puhelimeen
+    puhelu = peer.call(kohde, new MediaStream([...mikki.getAudioTracks(), mustaKuva()]));
+    puhelu.on('stream', s => {
+      $('kuva').srcObject = s;
+      $('kuva').muted = !$('kaiutin').classList.contains('on');
+      $('kuva').play().catch(() => {});
+      $('eikuvaa').style.display = s.getVideoTracks().length ? 'none' : 'flex';
+      tila('Yhdistetty kurpitsaan', 'ok');
+    });
+    puhelu.on('close', () => katkesi('Puhelu katkesi'));
+    puhelu.on('error', e => console.log('puhelu-virhe', e));
+  }
+
+  function katkesi(miksi) {
+    if (lopetettu) return;
+    tila(miksi + ', yhdistetään uudelleen…', 'odottaa');
+    try { puhelu && puhelu.close(); } catch (e) {}
+    try { ohjaus && ohjaus.close(); } catch (e) {}
+    puhelu = ohjaus = null;
+    clearTimeout(uusintaAjastin);
+    uusintaAjastin = setTimeout(soita, 3000);
+  }
+
+  function vastaanota(d) {
+    if (!d || typeof d !== 'object') return;
+    if (d.k === 'viesti') viesti(d.teksti);
+    if (d.k !== 'tila') return;
+    tabletinTila = d;
+    $('heraa').classList.toggle('paalla', d.hereilla);
+    $('nuku').classList.toggle('paalla', !d.hereilla);
+    if (d.tehosteet && !$('tehosteet').children.length) rakennaTehosteet(d.tehosteet);
+    [...$('tehosteet').children].forEach(b => b.classList.toggle('valittu', b.dataset.nimi === d.tehoste));
+    asetaKytkin($('lastenAani'), d.mikki, 'Kuuntele lapsia (tabletin mikrofoni)');
+    $('voimakkuus').value = Math.round(d.voimakkuus * 100); $('voimArvo').textContent = $('voimakkuus').value + ' %';
+    $('herkkyys').value = d.herkkyys; $('herkArvo').textContent = d.herkkyys;
+    asetaKytkin($('ilmeAuto'), d.ilmeet === 'auto', 'Virnistää välillä itsestään');
+    $('varavideo').disabled = !d.varavideo;
+  }
+
+  function rakennaTehosteet(t) {
+    Object.keys(t).forEach(nimi => {
+      const b = document.createElement('button');
+      b.textContent = t[nimi]; b.dataset.nimi = nimi;
+      b.onclick = () => laheta({ k: 'tehoste', nimi });
+      $('tehosteet').appendChild(b);
+    });
+  }
+
+  function asetaKytkin(el, paalla, teksti, pakko) {
+    el.classList.toggle('on', !!paalla);
+    el.classList.toggle('mute', !paalla);
+    el.innerHTML = teksti + ' <b>' + (pakko || (paalla ? 'päällä' : 'pois')) + '</b>';
+  }
+
+  $('yhdista').addEventListener('click', async () => {
+    huone = Yhteys.puhdista($('huone').value);
+    if (!huone || huone.length < 4) { tila('Kirjoita huoneen nimi (vähintään 4 merkkiä).'); return; }
+    Yhteys.muista('hw26-huone', $('huone').value);
+    $('yhdista').disabled = true;
+    try {
+      mikki = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (e) {
+      tila('Mikrofonia ei saatu (' + e.name + '). Salli mikrofoni selaimen asetuksista.');
+      $('yhdista').disabled = false; return;
+    }
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    analysoija = actx.createAnalyser(); analysoija.fftSize = 512;
+    actx.createMediaStreamSource(mikki).connect(analysoija);
+    try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (e) {}
+
+    lopetettu = false;
+    $('alku').style.display = 'none';
+    $('paneeli').style.display = 'block';
+    tila('Yhdistetään palvelimeen…', 'odottaa');
+    peer = new Peer(Yhteys.noitaId(huone), Yhteys.peerAsetukset());
+    peer.on('open', soita);
+    peer.on('disconnected', () => { if (!lopetettu) setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) peer.reconnect(); }, 2000); });
+    peer.on('error', e => {
+      console.log('peer-virhe', e.type, e);
+      if (e.type === 'peer-unavailable') { tila('Kurpitsa ei ole päällä. Käynnistä tabletin sivu, yritetään uudelleen…', 'odottaa'); clearTimeout(uusintaAjastin); uusintaAjastin = setTimeout(soita, 4000); }
+      else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type)) tila('Ei yhteyttä palvelimeen, tarkista netti…');
+    });
+  });
+
+  $('heraa').onclick = () => laheta({ k: 'heraa' });
+  $('nuku').onclick = () => laheta({ k: 'nuku' });
+  $('virne').onclick = () => laheta({ k: 'ilme', nimi: 'virne', kesto: 4000 });
+  $('vino').onclick = () => laheta({ k: 'ilme', nimi: 'vino', kesto: 4000 });
+  $('ilmeAuto').onclick = () => laheta({ k: 'ilmetila', arvo: tabletinTila.ilmeet === 'auto' ? 'nappi' : 'auto' });
+  $('varavideo').onclick = () => laheta({ k: 'varavideo' });
+  $('omaMikki').onclick = () => {
+    if (!mikki) return;
+    const paalla = !mikki.getAudioTracks()[0].enabled;
+    mikki.getAudioTracks().forEach(t => t.enabled = paalla);
+    asetaKytkin($('omaMikki'), paalla, 'Oma mikrofoni');
+  };
+  $('lastenAani').onclick = () => laheta({ k: 'mikki', paalla: !tabletinTila.mikki });
+  $('kaiutin').onclick = () => {
+    const kuuluu = !$('kaiutin').classList.contains('on');
+    $('kuva').muted = !kuuluu;
+    $('kaiutin').classList.toggle('on', kuuluu); $('kaiutin').classList.toggle('mute', !kuuluu);
+    $('kaiutin').innerHTML = 'Lasten ääni tässä puhelimessa <b>' + (kuuluu ? 'kuuluu' : 'mykistetty') + '</b>';
+  };
+  $('voimakkuus').oninput = () => { $('voimArvo').textContent = $('voimakkuus').value + ' %'; laheta({ k: 'voimakkuus', arvo: $('voimakkuus').value / 100 }); };
+  $('herkkyys').oninput = () => { $('herkArvo').textContent = $('herkkyys').value; laheta({ k: 'herkkyys', arvo: Number($('herkkyys').value) }); };
+  $('lopeta').onclick = () => {
+    lopetettu = true;
+    clearTimeout(uusintaAjastin);
+    try { puhelu && puhelu.close(); } catch (e) {}
+    try { peer && peer.destroy(); } catch (e) {}
+    if (mikki) mikki.getTracks().forEach(t => t.stop());
+    if (mustaRaita) { mustaRaita.stop(); mustaRaita = null; }
+    if (actx) actx.close();
+    peer = puhelu = ohjaus = mikki = null; analysoija = null;
+    $('tehosteet').innerHTML = '';
+    $('paneeli').style.display = 'none'; $('alku').style.display = 'block'; $('yhdista').disabled = false;
+    tila('Ei yhdistetty');
+  };
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && !lopetettu) { try { if (navigator.wakeLock) await navigator.wakeLock.request('screen'); } catch (e) {} }
+  });
+})();
+</script>
+</body>
+</html>
