@@ -27,6 +27,7 @@
   .video .ei { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #555; font-size: 14px; }
   .rivi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
   .iso { padding: 20px 10px; font-size: 19px; font-weight: 700; }
+  #paneeli.eiohjausta .iso, #paneeli.eiohjausta .ilmenappi { opacity:.45; }
   #heraa { background: var(--oranssi); color: #1a0d00; }
   #heraa.paalla { box-shadow: 0 0 0 3px #fff3 inset, 0 0 24px #ff8a1f88; }
   #nuku.paalla { background: #3a3a3a; }
@@ -60,6 +61,7 @@
   </section>
 
   <div id="tila"><i></i><span id="tilateksti">Ei yhdistetty</span></div>
+  <div id="diag" style="font-size:12px;color:#8a7d6d;margin:-6px 0 10px">&nbsp;</div>
 
   <section id="paneeli">
     <div class="video"><video id="kuva" playsinline autoplay></video><div class="ei" id="eikuvaa">Ei kamerakuvaa</div></div>
@@ -102,6 +104,13 @@
   const $ = id => document.getElementById(id);
   let peer = null, puhelu = null, ohjaus = null, mikki = null, huone = '', lopetettu = true, uusintaAjastin = null;
   let tabletinTila = {};
+  let iceTila = '-', ohjausTila = '-', vahtiAjastin = null;
+  function diag() {
+    $('diag').textContent = 'kuva/ääni: ' + iceTila + ' · ohjaus: ' + ohjausTila + (Yhteys.onTurn() ? ' · TURN päällä' : '');
+    const ok = ohjaus && ohjaus.open;
+    $('paneeli').classList.toggle('eiohjausta', !ok);
+    if (ok && (iceTila === 'connected' || iceTila === 'completed')) tila('Yhdistetty kurpitsaan', 'ok');
+  }
 
   $('huone').value = Yhteys.alkuHuone();
 
@@ -141,7 +150,10 @@
     const kohde = Yhteys.kurpitsaId(huone);
     tila('Soitetaan kurpitsalle…', 'odottaa');
     ohjaus = peer.connect(kohde, { reliable: true });
-    ohjaus.on('open', () => { laheta({ k: 'tila?' }); });
+    ohjausTila = 'avataan'; iceTila = 'avataan'; diag();
+    const tamaOhjaus = ohjaus;
+    Yhteys.seuraaIce(ohjaus, st => { if (ohjaus === tamaOhjaus && ohjausTila !== 'auki') { ohjausTila = st; diag(); } });
+    ohjaus.on('open', () => { ohjausTila = 'auki'; diag(); laheta({ k: 'tila?' }); });
     ohjaus.on('data', vastaanota);
     ohjaus.on('close', () => katkesi('Ohjausyhteys katkesi'));
     ohjaus.on('error', e => console.log('ohjaus-virhe', e));
@@ -153,8 +165,21 @@
       $('kuva').muted = !$('kaiutin').classList.contains('on');
       $('kuva').play().catch(() => {});
       $('eikuvaa').style.display = s.getVideoTracks().length ? 'none' : 'flex';
-      tila('Yhdistetty kurpitsaan', 'ok');
+      diag();
     });
+    const tamaPuhelu = puhelu;
+    Yhteys.seuraaIce(puhelu, st => {
+      if (puhelu !== tamaPuhelu) return;
+      iceTila = st; diag();
+      if (st === 'failed') katkesi(Yhteys.onTurn() ? 'Yhteys epäonnistui' : 'Laitteet eivät saa suoraa yhteyttä (wifi estää?)');
+    });
+    // Vahti: jos yhteys ei valmistu 20 sekunnissa, yritetään alusta
+    clearTimeout(vahtiAjastin);
+    vahtiAjastin = setTimeout(() => {
+      if (lopetettu) return;
+      if (!(ohjaus && ohjaus.open) || !(iceTila === 'connected' || iceTila === 'completed'))
+        katkesi(Yhteys.onTurn() ? 'Yhteys ei valmistunut' : 'Laitteet eivät saa suoraa yhteyttä (wifi estää?)');
+    }, 20000);
     puhelu.on('close', () => katkesi('Puhelu katkesi'));
     puhelu.on('error', e => console.log('puhelu-virhe', e));
   }
@@ -165,7 +190,8 @@
     try { puhelu && puhelu.close(); } catch (e) {}
     try { ohjaus && ohjaus.close(); } catch (e) {}
     puhelu = ohjaus = null;
-    clearTimeout(uusintaAjastin);
+    iceTila = ohjausTila = 'katkennut'; diag();
+    clearTimeout(uusintaAjastin); clearTimeout(vahtiAjastin);
     uusintaAjastin = setTimeout(soita, 3000);
   }
 
@@ -253,7 +279,7 @@
   $('herkkyys').oninput = () => { $('herkArvo').textContent = $('herkkyys').value; laheta({ k: 'herkkyys', arvo: Number($('herkkyys').value) }); };
   $('lopeta').onclick = () => {
     lopetettu = true;
-    clearTimeout(uusintaAjastin);
+    clearTimeout(uusintaAjastin); clearTimeout(vahtiAjastin);
     try { puhelu && puhelu.close(); } catch (e) {}
     try { peer && peer.destroy(); } catch (e) {}
     if (mikki) mikki.getTracks().forEach(t => t.stop());

@@ -300,11 +300,16 @@
       if (puhelu) { try { puhelu.close(); } catch (e) {} }
       puhelu = c;
       c.answer(omaStream || undefined);
-      c.on('stream', s => {
-        kytkeAani(s, true);
-        asetaPiste('yhdistetty');
-        tila('Noita on linjoilla');
-        if ($('heraaHeti').checked) heraa();
+      c.on('stream', s => { kytkeAani(s, true); });
+      let valmis = false;
+      Yhteys.seuraaIce(c, st => {
+        if (puhelu !== c) return;
+        console.log('[kurpitsa] ice', st);
+        if ((st === 'connected' || st === 'completed') && !valmis) {
+          valmis = true; asetaPiste('yhdistetty'); tila('Noita on linjoilla');
+          if ($('heraaHeti').checked) heraa();
+        } else if (st === 'failed') { asetaPiste('odottaa'); tila('Puhelu ei saanut suoraa yhteyttä, odotetaan uutta yritystä'); }
+        else if (!valmis) tila('Noita soittaa… (' + st + ')');
       });
       c.on('close', () => { if (puhelu === c) { puhelu = null; kytkeAani(null); asetaPiste('odottaa'); tila('Puhelu päättyi, odotetaan uutta'); } });
       c.on('error', err => console.log('puhelu-virhe', err));
