@@ -272,7 +272,8 @@
     if (hereilla) { hereilla = false; kasvot.style.transition = 'opacity .5s ease'; kasvot.style.opacity = 0; }
     moodi = 'kasvot';
     if (fx && tehoste !== 'normaali') { kurpitsaTehoste = tehoste; tehoste = fx.aseta('normaali'); }
-    noitaKuva.play().catch(() => {});
+    noitaKuva.muted = true;
+    noitaKuva.play().catch(e => console.log('noitaKuva play', e));
     noitaKuva.style.transition = 'opacity .8s ease';
     noitaKuva.style.opacity = 1;
     lahetaTila();
@@ -355,6 +356,27 @@
     }
     return { puhalla };
   })();
+
+  // ---------- diagnostiikka puhelimelle ----------
+  async function pariTyyppi(pc) {
+    const st = await pc.getStats(); let pari = null; const ehd = {};
+    st.forEach(r => { if (r.type === 'transport' && r.selectedCandidatePairId) pari = st.get(r.selectedCandidatePairId); });
+    if (!pari) st.forEach(r => { if (r.type === 'candidate-pair' && (r.selected || (r.nominated && r.state === 'succeeded'))) pari = r; });
+    st.forEach(r => { if (r.type === 'local-candidate' || r.type === 'remote-candidate') ehd[r.id] = r.candidateType; });
+    let vid = null; st.forEach(r => { if (r.type === 'inbound-rtp' && (r.kind || r.mediaType) === 'video') vid = r; });
+    return { pari: pari ? (ehd[pari.localCandidateId] || '?') + '↔' + (ehd[pari.remoteCandidateId] || '?') : '-',
+             vastaanotettu: vid ? Math.round((vid.bytesReceived || 0) / 1024) + ' kt' : '-', purettu: vid ? (vid.framesDecoded || 0) : '-',
+             koodekki: vid && vid.codecId && st.get(vid.codecId) ? st.get(vid.codecId).mimeType : '-' };
+  }
+  setInterval(async () => {
+    if (!ohjaus || !ohjaus.open) return;
+    const d = { k: 'diag', ice: puhelu && puhelu.peerConnection ? puhelu.peerConnection.iceConnectionState : '-',
+      kuva: noitaKuva.videoWidth + 'x' + noitaKuva.videoHeight, rs: noitaKuva.readyState, tauko: noitaKuva.paused,
+      naytetty: noitaKuva.getVideoPlaybackQuality ? noitaKuva.getVideoPlaybackQuality().totalVideoFrames : '-', moodi,
+      raidat: noitaKuva.srcObject ? noitaKuva.srcObject.getVideoTracks().map(t => t.readyState + (t.muted ? '/muted' : '')).join(',') : 'ei' };
+    try { if (puhelu && puhelu.peerConnection) Object.assign(d, await pariTyyppi(puhelu.peerConnection)); } catch (e) { d.virhe = String(e); }
+    try { ohjaus.send(d); } catch (e) {}
+  }, 1500);
 
   // ---------- yhteys ----------
   let peer = null, puhelu = null, ohjaus = null, omaStream = null, huone = '';
